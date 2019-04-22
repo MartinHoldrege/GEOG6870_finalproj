@@ -4,6 +4,11 @@ subtitle: "Exploratory Analysis of a 40 Year Data Set"
 author: "Martin Holdrege"
 date: "`r lubridate::today()`"
 output: html_document
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
 ---
 
 ```{r setup, include=FALSE}
@@ -61,7 +66,7 @@ The annual data (annual precipitation and seasonality) was summarized in two way
 
 # stack where each layer is raster of a single months precip (mm/day)
 # 1979-present (40 yrs of data!)
-s1 <- stack("data/monthly/precip.mon.mean.nc")
+s1 <- stack("data/precip.mon.mean.nc")
 dim(s1)
 class(s1)
 s1
@@ -114,16 +119,17 @@ slope_yrs <- lapply(yrly_vals, FUN = stack_slope, time = 1:nyrs)
 tmap_mode("plot")
 
 tm1 <- plot_precip(mean_vals$sum, title = "Mean Annual Precipitation",
-            legend_title = "mm/year")
+            legend_title = "mm/year", world = wrld2)
 
 tm2 <- plot_precip(mean_vals$cv, pal = "-RdBu", 
             title = "Mean Intra-annual Coefficient of Variation",
-            legend_title = "CV")
+            legend_title = "CV", world = wrld2)
 tm3 <- plot_precip((mean_vals$pci), pal = "-RdBu",
             title = "Mean Precipitation Concentration Index",
-            legend_title = "PCI")
+            legend_title = "PCI", world = wrld2)
 
 tmap_arrange(tm1, tm2, tm3, ncol = 1)
+
 ```
 
 
@@ -131,13 +137,13 @@ tmap_arrange(tm1, tm2, tm3, ncol = 1)
 ```{r change_plots, fig.height = 7.5, fig.width = 5, fig.cap = "Figure 3. Change in mean annual precipitation, coeffiecient of variation (CV), and precipitation concentration index (CPI) over 40 years. Where change for each pixel is the estimated slope from ordinary least squares regression.The diverging color palette is centered at 0."}
 tm4 <- plot_precip(slope_yrs$sum, midpoint = 0, 
                    title = "Change in Mean Annual Precipitation",
-                   legend_title = "MAP/year")
+                   legend_title = "MAP/year", world = wrld2)
 tm5 <- plot_precip(slope_yrs$cv, pal = "-RdBu", midpoint = 0,
                    title = "Change in Intra-annual Coefficient of Variation",
-                   legend_title = "CV/year")
+                   legend_title = "CV/year", world = wrld2)
 tm6 <- plot_precip(slope_yrs$pci, pal = "-RdBu", midpoint = 0,
                    title = "Change in Precipitation Concentration Index",
-                   legend_title = "PCI/year")
+                   legend_title = "PCI/year", world = wrld2)
 
 tmap_arrange(tm4, tm5, tm6, ncol = 1)
 ```
