@@ -1,0 +1,193 @@
+---
+title: "Final Project for GEOG 6870: Trends in Global Precipitation"
+subtitle: "Exploratory Analysis of a 40 Year Data Set"
+author: "Martin Holdrege"
+date: "`r lubridate::today()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+cache = TRUE
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(raster)
+library(maptools)
+library(sp)
+library(purrr)
+library(tmap)
+library(gridExtra)
+library(spdep)
+source("geospatial_project_funcs.R")
+```
+
+# 1. The Challenge 
+
+The focus of this exploratory analysis is understanding patterns of global precipitation. Specifically, precipitation occuring over land masses. With climate change, patterns of precipitation have been observed and forecasted to become more extreme. Here I focus on two things, 1) annual precipitation and 2) intra-annual variability in precipitation (seasonality of precipitation). Mean annual precipitation is a primary driver of the distribution of biomes. Variability in precipitation is also an important, but less discussed driver of vegetation distributions. For instance in a semi-arid environment if most annual precipitation falls during a short season (highly seasonal) then more deeply rooted plants (e.g. shrubs) may outcompete more shallowly rooted plants (e.g. grasses). Increased precipitation intensity is hypothesized to be a contributing factor in the globally observed phenomenon of shrub encroachment. 
+
+The first objective of this analysis is to understand the spatial distrubtion of mean annual precipitation, and intra-annual variation in precipitation. Secondly, to estimate if and how annual precipitation and intra-annual precipitation intensity have been changing over the past 40 years, and third to estimate the spatial autocorrelation in these changes. 
+
+```{r global_map, fig.cap = "Figure 1. For this analysis, global precipitation data over land will be used, rasters of monthly precipitation data were masked to include only pixels over these land areas"}
+data("wrld_simpl")
+# restrict to only precipitation over land
+wrld1 <- wrld_simpl
+plot(wrld1)
+```
+
+# 2. Data Overview
+
+For this analysis Global Precipitation Climatology Project monthly precipitation dataset[^1] from 1979 through 2018 was used.  This data set consists of a 2.5°x 2.5° global grid. In this data-set each grid-cell contains the monthly precipitation, which was estimated from satellite and rain-gauge data.
+
+For each of the 40 years of data, total precipitation for the year was calculated. 
+
+For each year, two measures of seasonality were also calculated. The first was coefficient of variation (CV):
+$$CV = \frac{\sigma}{\mu}$$
+where $\sigma$ is the standard deviation of monthly precipitation and $\mu$ is the annual precipitation. 
+
+The second measure of seasonality was Precipitation Concentration Index:
+
+$$PCI = \frac{100\sum_{i=1}^{12} P_m(i)^2}{P^2_{yr}}$$
+where the numerator is the 100 times the sums of squared monthly precipitation, and the denominator is the squared annual precipitation. For both CV and PCI, a larger value means more seasonal precipitation. The maximimum possible PCI value is 100, which would mean that all the precipitation fell in one month. 
+
+The annual data (annual precipitation and seasonality) was summarized in two ways. First means were taken for each pixel, to get mean annual precipitation, and mean seasonality across 40 years. Second, ordinary least squares regression was run to measure the change (slope) in annual precipitation and seasonality over 40 years, for each pixel. 
+
+# 3 Visualizations
+
+```{r load, cache = cache, results = 'hide', message = FALSE, error = FALSE}
+# similar to https://rpubs.com/dakotaobie/precipprac, but working with
+# rasters instead of matrix
+
+# stack where each layer is raster of a single months precip (mm/day)
+# 1979-present (40 yrs of data!)
+s1 <- stack("data/monthly/precip.mon.mean.nc")
+dim(s1)
+class(s1)
+s1
+s2 <- s1[[1:480]] # discard jan/feb 2019. 
+# plot(s2[[1]])
+
+s2 <- stack_NA(s2) # replacing negatives with NA
+
+s2 <- rotate(s2) # now goes -180 to 180
+```
+
+```{r process, dependson= "load", cache = cache}
+crs <- s2@crs
+wrld2 <- spTransform(wrld1, crs)
+
+s2.1 <- mask(s2,  wrld2) # I'll be using pixels over land only.
+```
+
+
+```{r summarize1, cache = cache, dependson= "process"}
+# convert from monthly mean to monthly total precip
+nbands <- dim(s2.1)[3] # how many layers
+nyrs <- nbands/12
+
+s3 <- calc(s2.1, fun = function(x, na.rm){
+  mean2total_prcp(x, month = rep(1:12, nyrs))
+  
+})
+
+indices_yrly <- rep(1:nyrs, each = 12)
+ 
+# year level summaries of the precip data (ie computed within year):
+# calculate precipitation concentration index, CV, and sum
+funcs <- list(sum = sum_na, cv = CV_annual, pci = PCI) 
+
+yrly_vals <- lapply(funcs, function(fun){
+  stackApply(s3, indices = indices_yrly, fun = fun, na.rm = TRUE)
+})
+
+# mean values of yrly summary data (ie means across years)
+mean_vals <- lapply(yrly_vals, FUN = stackApply, indices = rep(1, nyrs),
+                    fun = mean)
+
+# change in yearly stats over time
+slope_yrs <- lapply(yrly_vals, FUN = stack_slope, time = 1:nyrs)
+```
+
+```{r mean_plots, message = FALSE, fig.height = 7.5, fig.width = 5, fig.cap = "Figure 2. Mean annual precipitation, coeffiecient of variation (CV), and precipitation concentration index (CPI). Each grid cell is a mean of 40 values (1979-2018). CV and CPI were calculated for each year based on monthly precipitation. The diverging color palette is centered at the mean."}
+
+tmap_mode("plot")
+
+tm1 <- plot_precip(mean_vals$sum, title = "Mean Annual Precipitation",
+            legend_title = "mm/year")
+
+tm2 <- plot_precip(mean_vals$cv, pal = "-RdBu", 
+            title = "Mean Intra-annual Coefficient of Variation",
+            legend_title = "CV")
+tm3 <- plot_precip((mean_vals$pci), pal = "-RdBu",
+            title = "Mean Precipitation Concentration Index",
+            legend_title = "PCI")
+
+tmap_arrange(tm1, tm2, tm3, ncol = 1)
+```
+
+
+
+```{r change_plots, fig.height = 7.5, fig.width = 5, fig.cap = "Figure 3. Change in mean annual precipitation, coeffiecient of variation (CV), and precipitation concentration index (CPI) over 40 years. Where change for each pixel is the estimated slope from ordinary least squares regression.The diverging color palette is centered at 0."}
+tm4 <- plot_precip(slope_yrs$sum, midpoint = 0, 
+                   title = "Change in Mean Annual Precipitation",
+                   legend_title = "MAP/year")
+tm5 <- plot_precip(slope_yrs$cv, pal = "-RdBu", midpoint = 0,
+                   title = "Change in Intra-annual Coefficient of Variation",
+                   legend_title = "CV/year")
+tm6 <- plot_precip(slope_yrs$pci, pal = "-RdBu", midpoint = 0,
+                   title = "Change in Precipitation Concentration Index",
+                   legend_title = "PCI/year")
+
+tmap_arrange(tm4, tm5, tm6, ncol = 1)
+```
+
+
+
+```{r histograms, warning = FALSE, fig.height = 9, fig.width = 6, fig.cap = "Figure 4. Distributions of changes (slopes from OLS regression) in Mean Annual Precipitation, Coefficient of Variation, and Precipitation Concentration Index. Extreme outliers are not shown in the histograms, so that the center of the distribution can be seen better. Note mean and median values of changes in CV and PCI, which provide evidence for increased precipitation intensity. Note, one shortcoming of looking at the data this way is that the pixels are not weighted by size, which may be an issue because grid-cells are smaller closer to the poles."}
+
+# histograms of pixels (slopes)
+slope_values <- lapply(slope_yrs, function(x) data.frame(x = x@data@values))
+
+g1 <- g_hist1(slope_values$sum, title = "Change in Mean Annual Precipitation",
+              xlab = "Change in MAP (mm/year)")  +
+  coord_cartesian(xlim = c(-15, 15))
+
+g2 <- g_hist1(slope_values$cv, title = "Change in Coefficient of Variation",
+              xlab = "Change in CV (CV/year)") 
+
+g3 <- g_hist1(slope_values$pci, title = "Change in Precipitation Concentration Index",
+              xlab = "Change in PCI (PCI/year)") +
+  coord_cartesian(xlim = c(-0.3, 0.7))
+
+grid.arrange(g1, g2, g3)
+```
+
+# 4. Analysis
+
+The level of spatial autocorrelation in changes in annual precipitation and seasonality was estimated. 
+
+This was done to understand to what degree pixels close to each other are changing in similar ways. For example, this helps us understand  whether increasing (or decreasing) seasonality is spatially autocorrelated. Meaning if one pixel is tending toward increasing (decreasing) seasonality are the adjacent pixels changing in the same way, and to what is the relationship between that given pixels and pixels ever further away. It is common sense that precipitation patterns in one area tends to be similar to those nearby. However, it can be of greater interest to more precisely estimate the levels of this correlation and to what degree areas furthar apart follow similar (or different) trends. 
+
+For this analysis Moran's I was calculated. Moran's I can be thought of as the slope of the regression line between values of a pixel and those of it's neighbors. Thus a value of near 0 would indicate that neighboring pixels have no similarity and a value near 1 would indicate that neigboring pixels tend to be nearly identical. In this case, for lag 1, Moran's I would be the slope of the regression between pixels and the mean of the four nearest pixels (the neighborhood for lag 2 would be the next closest pixels). 
+
+```{r moran, cache = cache, dependson= "summarize1"}
+# calculating correlograms
+slope_cgm <- lapply(slope_yrs, moran_cgm, k = 4, order = 8)
+
+```
+
+```{r, fig.height = 6, fig.width = 7, fig.cap = "Figure 5. Spatial correlograms for Moran's I. These plots indicate that areas close to each other had more similar changes in precipitation quantity (MAP) and seasonality (CV, PCI) than areas further apart, Lag 1 refers to the four nearest pixels, lag 2 refers to the next closest pixels, and so on."}
+# plotting correlograms
+titles <- c("Change in Mean Annual Precipitation", 
+            "Change in Intra-annual Coefficient of Variation",
+            "Change in Precipitation Concentration Index")
+
+par(cex.main = 0.8, mfrow = c(2, 2))
+walk2(.x = slope_cgm, .y = titles, .f = plot, ylim = c(0, 1))
+```
+
+The figures above indicate that spatial-autocorrelation is stronger for changes in seasonality than changes in annual precipitation, and that this autocorrelation extends out to further distances. This suggests that larger regions are likely seeing more similar changes in seasonality than in total precipitation. 
+
+
+[^1]: Adler, R.F., G.J. Huffman, A. Chang, R. Ferraro, P. Xie, J. Janowiak, B. Rudolf, U. Schneider, S. Curtis, D. Bolvin, A. Gruber, J. Susskind, and P. Arkin, 2003: The Version 2 Global Precipitation Climatology Project (GPCP) Monthly Precipitation Analysis (1979-Present). J. Hydrometeor., 4,1147-1167.
