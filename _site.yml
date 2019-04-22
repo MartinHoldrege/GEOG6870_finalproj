@@ -1,0 +1,7 @@
+name: "Geospatial Analysis"
+output_dir: "."
+navbar:
+  title: "Final Project"
+  left:
+    - text: "Overview"
+      href: index.html
