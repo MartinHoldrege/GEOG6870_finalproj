@@ -30,11 +30,19 @@ source("geospatial_project_funcs.R")
 
 # 1. The Challenge 
 
-The focus of this exploratory analysis is understanding patterns of global precipitation. Specifically, precipitation occuring over land masses. With climate change, patterns of precipitation have been observed and forecasted to become more extreme. Here I focus on two things, 1) annual precipitation and 2) intra-annual variability in precipitation (seasonality of precipitation). Mean annual precipitation is a primary driver of the distribution of biomes. Variability in precipitation is also an important, but less discussed driver of vegetation distributions. For instance in a semi-arid environment if most annual precipitation falls during a short season (highly seasonal) then more deeply rooted plants (e.g. shrubs) may outcompete more shallowly rooted plants (e.g. grasses). Increased precipitation intensity is hypothesized to be a contributing factor in the globally observed phenomenon of shrub encroachment. 
+### Focus
 
-The first objective of this analysis is to understand the spatial distrubtion of mean annual precipitation, and intra-annual variation in precipitation. Secondly, to estimate if and how annual precipitation and intra-annual precipitation intensity have been changing over the past 40 years, and third to estimate the spatial autocorrelation in these changes. 
+The focus of this exploratory analysis is understanding patterns of global precipitation. Specifically, precipitation occurring over land masses. With climate change, patterns of precipitation have been observed and forecasted to become more extreme. Here I focus on two things, 1) annual precipitation and 2) intra-annual variability in precipitation (seasonality of precipitation). 
 
-```{r global_map, fig.cap = "Figure 1. For this analysis, global precipitation data over land will be used, rasters of monthly precipitation data were masked to include only pixels over these land areas"}
+### Relevance
+
+These patterns are of interest because precipitation drives many global trends. For example, mean annual precipitation is a primary driver of the distribution of biomes. Variability in precipitation also has an important, but less discussed, impact on vegetation distributions. For instance, in a semi-arid environment if most annual precipitation falls during a short season (highly seasonal) then deeply rooted plants (e.g. shrubs) may out-compete more shallowly rooted plants (e.g. grasses). As a result, increased precipitation intensity is hypothesized to be a contributing factor in the globally observed phenomenon of shrub encroachment. 
+
+### Objectives
+
+The first objective of this analysis is to understand the spatial distribution of mean annual precipitation, and intra-annual variation in precipitation. Secondly, to estimate if and how annual precipitation and seasonality have been changing over the past 40 years, and third, to estimate the spatial autocorrelation of these changes. 
+
+```{r global_map, fig.cap = "Figure 1. For this analysis, global precipitation data over land will be used, monthly precipitation data was masked to include only pixels over these land areas"}
 data("wrld_simpl")
 # restrict to only precipitation over land
 wrld1 <- wrld_simpl
@@ -43,22 +51,22 @@ plot(wrld1)
 
 # 2. Data Overview
 
-For this analysis Global Precipitation Climatology Project monthly precipitation dataset[^1] from 1979 through 2018 was used.  This data set consists of a 2.5°x 2.5° global grid. In this data-set each grid-cell contains the monthly precipitation, which was estimated from satellite and rain-gauge data.
+For this analysis, the Global Precipitation Climatology Project monthly precipitation dataset[^1] from 1979 through 2018 was used.  This data set consists of a 2.5°x 2.5° global grid. In this dataset each grid-cell contains the monthly precipitation, which was estimated from satellite and rain-gauge data.
 
 For each of the 40 years of data, total precipitation for the year was calculated. 
 
 For each year, two measures of seasonality were also calculated. The first was coefficient of variation (CV):
 $$CV = \frac{\sigma}{\mu}$$
-where $\sigma$ is the standard deviation of monthly precipitation and $\mu$ is the annual precipitation. 
+where $\sigma$ is the standard deviation of monthly precipitation and $\mu$ is the mean monthly precipitation. 
 
-The second measure of seasonality was Precipitation Concentration Index:
+The second measure of seasonality was the Precipitation Concentration Index:
 
 $$PCI = \frac{100\sum_{i=1}^{12} P_m(i)^2}{P^2_{yr}}$$
-where the numerator is the 100 times the sums of squared monthly precipitation, and the denominator is the squared annual precipitation. For both CV and PCI, a larger value means more seasonal precipitation. The maximimum possible PCI value is 100, which would mean that all the precipitation fell in one month. 
+where the numerator is the 100 times the sum of squared monthly precipitation, and the denominator is the squared annual precipitation. For both CV and PCI, a larger value means more seasonal precipitation. The maximum possible PCI value is 100, which would mean that all the precipitation fell in one month. 
 
-The annual data (annual precipitation and seasonality) was summarized in two ways. First means were taken for each pixel, to get mean annual precipitation, and mean seasonality across 40 years. Second, ordinary least squares regression was run to measure the change (slope) in annual precipitation and seasonality over 40 years, for each pixel. 
+The annual data (annual precipitation and seasonality) was summarized in two ways. First, means were calculated for each pixel, to get mean annual precipitation, and mean seasonality across 40 years. Second, ordinary least squares regression was used to calculate the change (slope) in annual precipitation and seasonality over 40 years, for each pixel. 
 
-# 3 Visualizations
+# 3. Visualizations
 
 ```{r load, cache = cache, results = 'hide', message = FALSE, error = FALSE}
 # similar to https://rpubs.com/dakotaobie/precipprac, but working with
@@ -114,7 +122,7 @@ mean_vals <- lapply(yrly_vals, FUN = stackApply, indices = rep(1, nyrs),
 slope_yrs <- lapply(yrly_vals, FUN = stack_slope, time = 1:nyrs)
 ```
 
-```{r mean_plots, message = FALSE, fig.height = 7.5, fig.width = 5, fig.cap = "Figure 2. Mean annual precipitation, coeffiecient of variation (CV), and precipitation concentration index (CPI). Each grid cell is a mean of 40 values (1979-2018). CV and CPI were calculated for each year based on monthly precipitation. The diverging color palette is centered at the mean."}
+```{r mean_plots, message = FALSE, fig.height = 7.5, fig.width = 5, fig.cap = "Figure 2. Mean annual precipitation (MAP), coefficient of variation (CV), and precipitation concentration index (PCI)(CV and PCI were calculated for each year based on monthly precipitation). Each grid cell is the mean of 40 values (1979-2018). The diverging color palette is centered at the mean, so red areas are drier (MAP) or more seasonal (CV and PCI) than the mean."}
 
 tmap_mode("plot")
 
@@ -134,7 +142,7 @@ tmap_arrange(tm1, tm2, tm3, ncol = 1)
 
 
 
-```{r change_plots, fig.height = 7.5, fig.width = 5, fig.cap = "Figure 3. Change in mean annual precipitation, coeffiecient of variation (CV), and precipitation concentration index (CPI) over 40 years. Where change for each pixel is the estimated slope from ordinary least squares regression.The diverging color palette is centered at 0."}
+```{r change_plots, fig.height = 7.5, fig.width = 5, fig.cap = "Figure 3. Change in mean annual precipitation (MAP), coefficient of variation (CV), and precipitation concentration index (PCI) over 40 years. Where change for each pixel is the estimated slope from ordinary least squares regression.The diverging color palette is centered at 0. Red areas are getting drier (MAP), or more seasonal (CV, PCI)."}
 tm4 <- plot_precip(slope_yrs$sum, midpoint = 0, 
                    title = "Change in Mean Annual Precipitation",
                    legend_title = "MAP/year", world = wrld2)
@@ -171,11 +179,11 @@ grid.arrange(g1, g2, g3)
 
 # 4. Analysis
 
-The level of spatial autocorrelation in changes in annual precipitation and seasonality was estimated. 
+The level of spatial autocorrelation in changes in annual precipitation and seasonality were estimated. 
 
-This was done to understand to what degree pixels close to each other are changing in similar ways. For example, this helps us understand  whether increasing (or decreasing) seasonality is spatially autocorrelated. Meaning if one pixel is tending toward increasing (decreasing) seasonality are the adjacent pixels changing in the same way, and to what is the relationship between that given pixels and pixels ever further away. It is common sense that precipitation patterns in one area tends to be similar to those nearby. However, it can be of greater interest to more precisely estimate the levels of this correlation and to what degree areas furthar apart follow similar (or different) trends. 
+This was done to understand to what degree pixels close to each other are changing in similar ways. For example, this helps us understand  whether increasing (or decreasing) seasonality is spatially autocorrelated. Meaning if one pixel is following a trend of increasing (decreasing) seasonality are the adjacent pixels changing in the same way, and how does the relationship change between more distant pixels. It is common sense that precipitation patterns in one area tend to be similar to those nearby. However, it can be of greater interest to more precisely estimate the levels of this correlation and to what degree areas further apart follow similar (or different) trends. 
 
-For this analysis Moran's I was calculated. Moran's I can be thought of as the slope of the regression line between values of a pixel and those of it's neighbors. Thus a value of near 0 would indicate that neighboring pixels have no similarity and a value near 1 would indicate that neigboring pixels tend to be nearly identical. In this case, for lag 1, Moran's I would be the slope of the regression between pixels and the mean of the four nearest pixels (the neighborhood for lag 2 would be the next closest pixels). 
+For this analysis Moran's I was calculated. Moran's I can be thought of as the slope of the regression line between values of a pixel and those of it's neighbors. Thus a value of near 0 would indicate that neighboring pixels have no similarity and a value near 1 would indicate that neighboring pixels tend to be nearly identical. In this case, for lag 1, Moran's I would be the slope of the regression between pixels and the mean of the four nearest pixels (the neighborhood for lag 2 would be the next closest pixels). 
 
 ```{r moran, cache = cache, dependson= "summarize1"}
 # calculating correlograms
@@ -193,7 +201,7 @@ par(cex.main = 0.8, mfrow = c(2, 2))
 walk2(.x = slope_cgm, .y = titles, .f = plot, ylim = c(0, 1))
 ```
 
-The figures above indicate that spatial-autocorrelation is stronger for changes in seasonality than changes in annual precipitation, and that this autocorrelation extends out to further distances. This suggests that larger regions are likely seeing more similar changes in seasonality than in total precipitation. 
+The figures above indicate that spatial autocorrelation is stronger for changes in seasonality than changes in annual precipitation, and that this autocorrelation extends out to further distances. This suggests that larger regions are likely seeing more similar changes in seasonality than in total precipitation. 
 
 
 [^1]: Adler, R.F., G.J. Huffman, A. Chang, R. Ferraro, P. Xie, J. Janowiak, B. Rudolf, U. Schneider, S. Curtis, D. Bolvin, A. Gruber, J. Susskind, and P. Arkin, 2003: The Version 2 Global Precipitation Climatology Project (GPCP) Monthly Precipitation Analysis (1979-Present). J. Hydrometeor., 4,1147-1167.
